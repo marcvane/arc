@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "508339142935",
+    "project_id": "marc-vane",
+    "storage_bucket": "marc-vane.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:508339142935:android:002aa749061bb32bf6b752",
+        "android_client_info": {
+          "package_name": "com.marcvane.arc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASXZ7ERi9l_lPzqiZoGZsTA8BdvKaj8ew"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
