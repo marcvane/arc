@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
 
+import 'firebase_options.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 import 'screens/profile_setup_screen.dart';
@@ -13,34 +14,64 @@ import 'services/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ==============================
-  // FIREBASE
-  //
-  // Android / iOS uniquement pour
-  // le moment.
-  //
-  // La version Web ARC utilise
-  // Supabase normalement, mais ne
-  // démarre pas Firebase tant que
-  // Firebase Web n'est pas configuré.
-  // ==============================
+  // =================================
+  // SUPABASE
+  // =================================
 
-  if (!kIsWeb) {
-    await Firebase.initializeApp();
+  try {
+    await Supabase.initialize(
+      url:
+          'https://fervsgtratqvwcxljdqd.supabase.co',
+      publishableKey:
+          'sb_publishable_Q84yZ-nOd4IqBBsetrJOMw_vtI0yG_B',
+    );
+  } catch (error, stackTrace) {
+    debugPrint(
+      'Erreur initialisation Supabase : $error',
+    );
+
+    debugPrint(
+      '$stackTrace',
+    );
   }
 
-  // ==============================
-  // SUPABASE
-  // ==============================
+  // =================================
+  // FIREBASE
+  //
+  // Android / iOS uniquement.
+  //
+  // Firebase ne doit jamais empêcher
+  // ARC de démarrer.
+  // =================================
 
-  await Supabase.initialize(
-    url:
-        'https://fervsgtratqvwcxljdqd.supabase.co',
-    publishableKey:
-        'sb_publishable_Q84yZ-nOd4IqBBsetrJOMw_vtI0yG_B',
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp(
+        options:
+            DefaultFirebaseOptions.currentPlatform,
+      );
+
+      debugPrint(
+        'Firebase initialisé correctement.',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Firebase non initialisé : $error',
+      );
+
+      debugPrint(
+        '$stackTrace',
+      );
+    }
+  }
+
+  // =================================
+  // LANCEMENT DE L'APPLICATION
+  // =================================
+
+  runApp(
+    const ArcApp(),
   );
-
-  runApp(const ArcApp());
 }
 
 // =================================
@@ -48,26 +79,47 @@ Future<void> main() async {
 // =================================
 
 class ArcApp extends StatefulWidget {
-  const ArcApp({super.key});
+  const ArcApp({
+    super.key,
+  });
 
   @override
-  State<ArcApp> createState() => _ArcAppState();
+  State<ArcApp> createState() =>
+      _ArcAppState();
 }
 
 class _ArcAppState extends State<ArcApp> {
-  StreamSubscription<AuthState>? authSubscription;
+  StreamSubscription<AuthState>?
+      authSubscription;
 
   @override
   void initState() {
     super.initState();
 
-    authSubscription = Supabase
-        .instance.client.auth.onAuthStateChange
-        .listen((data) {
-      if (!mounted) return;
+    try {
+      authSubscription =
+          Supabase.instance.client.auth
+              .onAuthStateChange
+              .listen(
+        (data) {
+          if (!mounted) {
+            return;
+          }
 
-      setState(() {});
-    });
+          setState(
+            () {},
+          );
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Erreur écoute Auth Supabase : $error',
+      );
+
+      debugPrint(
+        '$stackTrace',
+      );
+    }
   }
 
   @override
@@ -78,21 +130,30 @@ class _ArcAppState extends State<ArcApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+
       title: 'ARC',
 
       theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
+        brightness:
+            Brightness.dark,
 
-        colorScheme: const ColorScheme.dark(
-          primary: Colors.white,
+        scaffoldBackgroundColor:
+            Colors.black,
+
+        colorScheme:
+            const ColorScheme.dark(
+          primary:
+              Colors.white,
         ),
       ),
 
-      home: const AuthGate(),
+      home:
+          const AuthGate(),
     );
   }
 }
@@ -102,7 +163,9 @@ class _ArcAppState extends State<ArcApp> {
 // =================================
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
+  const AuthGate({
+    super.key,
+  });
 
   @override
   State<AuthGate> createState() =>
@@ -112,13 +175,10 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   bool isLoading = true;
 
-  // "hasProfile" signifie :
-  // le profil ARC est réellement terminé,
-  // avec pseudo + date de naissance
-  // + photo principale.
   bool hasProfile = false;
 
-  bool notificationsInitialized = false;
+  bool notificationsInitialized =
+      false;
 
   @override
   void initState() {
@@ -132,108 +192,167 @@ class _AuthGateState extends State<AuthGate> {
   // ==============================
 
   Future<void> checkAccount() async {
-    final user =
-        Supabase.instance.client.auth.currentUser;
-
-    // ==============================
-    // PAS CONNECTÉ
-    // ==============================
-
-    if (user == null) {
-      if (!mounted) return;
-
-      setState(() {
-        isLoading = false;
-        hasProfile = false;
-        notificationsInitialized = false;
-      });
-
-      return;
-    }
-
-    // ==============================
-    // VÉRIFICATION DU PROFIL
-    // ==============================
-
     try {
-      final profile = await Supabase
-          .instance.client
-          .from('profiles')
-          .select(
-            'id, username, birth_date, photo_1_url',
-          )
-          .eq('id', user.id)
-          .maybeSingle();
+      final user =
+          Supabase.instance.client.auth
+              .currentUser;
 
       // ==============================
-      // PROFIL COMPLET ?
+      // PAS CONNECTÉ
       // ==============================
+
+      if (user == null) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(
+          () {
+            isLoading = false;
+
+            hasProfile = false;
+
+            notificationsInitialized =
+                false;
+          },
+        );
+
+        return;
+      }
+
+      // ==============================
+      // VÉRIFICATION DU PROFIL
+      // ==============================
+
+      final profile =
+          await Supabase.instance.client
+              .from(
+                'profiles',
+              )
+              .select(
+                'id, username, birth_date, photo_1_url',
+              )
+              .eq(
+                'id',
+                user.id,
+              )
+              .maybeSingle();
 
       final username =
-          profile?['username'] as String?;
+          profile?['username']
+              as String?;
 
       final birthDate =
           profile?['birth_date'];
 
       final photo1Url =
-          profile?['photo_1_url'] as String?;
+          profile?['photo_1_url']
+              as String?;
 
       final profileComplete =
           profile != null &&
           username != null &&
-          username.trim().isNotEmpty &&
+          username
+              .trim()
+              .isNotEmpty &&
           birthDate != null &&
-          birthDate.toString().trim().isNotEmpty &&
+          birthDate
+              .toString()
+              .trim()
+              .isNotEmpty &&
           photo1Url != null &&
-          photo1Url.trim().isNotEmpty;
+          photo1Url
+              .trim()
+              .isNotEmpty;
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      setState(() {
-        hasProfile = profileComplete;
-        isLoading = false;
-      });
+      setState(
+        () {
+          hasProfile =
+              profileComplete;
+
+          isLoading =
+              false;
+        },
+      );
 
       // ==============================
       // NOTIFICATIONS
-      //
-      // Pas sur Web pour le moment.
       // ==============================
 
       if (!kIsWeb &&
           profileComplete &&
           !notificationsInitialized) {
-        notificationsInitialized = true;
+        notificationsInitialized =
+            true;
 
         try {
-          await NotificationService.initialize();
-        } catch (error) {
+          await NotificationService
+              .initialize();
+        } catch (error, stackTrace) {
           debugPrint(
             'Impossible d’initialiser '
             'les notifications : $error',
           );
 
-          notificationsInitialized = false;
+          debugPrint(
+            '$stackTrace',
+          );
+
+          notificationsInitialized =
+              false;
         }
       }
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        hasProfile = false;
-        isLoading = false;
-      });
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Impossible de vérifier '
+        'le compte : $error',
+      );
 
       debugPrint(
-        'Impossible de vérifier le profil : $error',
+        '$stackTrace',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(
+        () {
+          hasProfile =
+              false;
+
+          isLoading =
+              false;
+
+          notificationsInitialized =
+              false;
+        },
       );
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final user =
-        Supabase.instance.client.auth.currentUser;
+  Widget build(
+    BuildContext context,
+  ) {
+    User? user;
+
+    try {
+      user =
+          Supabase.instance.client.auth
+              .currentUser;
+    } catch (error) {
+      debugPrint(
+        'Impossible de lire '
+        'l’utilisateur Supabase : $error',
+      );
+
+      user = null;
+    }
 
     // ==============================
     // CHARGEMENT
@@ -241,10 +360,13 @@ class _AuthGateState extends State<AuthGate> {
 
     if (isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor:
+            Colors.black,
 
-        body: Center(
-          child: CircularProgressIndicator(),
+        body:
+            Center(
+          child:
+              CircularProgressIndicator(),
         ),
       );
     }
@@ -278,20 +400,30 @@ class _AuthGateState extends State<AuthGate> {
 // =================================
 
 class WelcomePage extends StatelessWidget {
-  const WelcomePage({super.key});
+  const WelcomePage({
+    super.key,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor:
+          Colors.black,
 
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 28,
+      body:
+          SafeArea(
+        child:
+            Padding(
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal:
+                28,
           ),
 
-          child: Column(
+          child:
+              Column(
             children: [
               const Spacer(),
 
@@ -301,22 +433,33 @@ class WelcomePage extends StatelessWidget {
 
               Image.asset(
                 'assets/arc_logo.png',
-                height: 100,
-                fit: BoxFit.contain,
+                height:
+                    100,
+                fit:
+                    BoxFit.contain,
               ),
 
               const SizedBox(
-                height: 20,
+                height:
+                    20,
               ),
 
               const Text(
                 "L'audace a un nom.",
-                textAlign: TextAlign.center,
 
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                  letterSpacing: 1,
+                textAlign:
+                    TextAlign.center,
+
+                style:
+                    TextStyle(
+                  fontSize:
+                      16,
+
+                  color:
+                      Colors.white70,
+
+                  letterSpacing:
+                      1,
                 ),
               ),
 
@@ -327,22 +470,32 @@ class WelcomePage extends StatelessWidget {
               // ==========================
 
               SizedBox(
-                width: double.infinity,
-                height: 56,
+                width:
+                    double.infinity,
 
-                child: ElevatedButton(
-                  onPressed: () {
+                height:
+                    56,
+
+                child:
+                    ElevatedButton(
+                  onPressed:
+                      () {
                     Navigator.push(
                       context,
+
                       MaterialPageRoute(
-                        builder: (context) =>
-                            const LoginScreen(),
+                        builder:
+                            (
+                              context,
+                            ) =>
+                                const LoginScreen(),
                       ),
                     );
                   },
 
                   style:
-                      ElevatedButton.styleFrom(
+                      ElevatedButton
+                          .styleFrom(
                     backgroundColor:
                         Colors.white,
 
@@ -358,11 +511,15 @@ class WelcomePage extends StatelessWidget {
                     ),
                   ),
 
-                  child: const Text(
+                  child:
+                      const Text(
                     'Commencer',
 
-                    style: TextStyle(
-                      fontSize: 17,
+                    style:
+                        TextStyle(
+                      fontSize:
+                          17,
+
                       fontWeight:
                           FontWeight.bold,
                     ),
@@ -371,7 +528,8 @@ class WelcomePage extends StatelessWidget {
               ),
 
               const SizedBox(
-                height: 24,
+                height:
+                    24,
               ),
             ],
           ),
