@@ -24,6 +24,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final emailController = TextEditingController();
   final codeController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  static const String reviewEmail = 'review.arcapp@gmail.com';
+
+  bool reviewLogin = false;
+  bool obscurePassword = true;
 
   // ============================================
   // ÉTAT AUTH
@@ -163,6 +169,135 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ============================================
+  // CONNEXION COMPTE DE VÉRIFICATION
+  // ============================================
+
+  Future<void> signInReviewAccount() async {
+    FocusScope.of(context).unfocus();
+    hideArcNotification();
+
+    final email = emailController.text.trim().toLowerCase();
+    final password = passwordController.text;
+
+    if (email != reviewEmail) {
+      return;
+    }
+
+    if (password.isEmpty) {
+      showArcNotification(
+        'Entre le mot de passe.',
+        type: ArcNotificationType.error,
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final response =
+          await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      final user =
+          response.user ??
+          Supabase.instance.client.auth.currentUser;
+
+      if (user == null) {
+        throw Exception(
+          'Impossible de récupérer le compte ARC.',
+        );
+      }
+
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select(
+            'id, username, birth_date, photo_1_url',
+          )
+          .eq(
+            'id',
+            user.id,
+          )
+          .maybeSingle();
+
+      final username = profile?['username'] as String?;
+      final birthDate = profile?['birth_date'];
+      final photo1Url = profile?['photo_1_url'] as String?;
+
+      final profileComplete =
+          profile != null &&
+          username != null &&
+          username.trim().isNotEmpty &&
+          birthDate != null &&
+          birthDate.toString().trim().isNotEmpty &&
+          photo1Url != null &&
+          photo1Url.trim().isNotEmpty;
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      if (!profileComplete) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                const ProfileSetupScreen(),
+          ),
+          (route) => false,
+        );
+        return;
+      }
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              const HomeScreen(),
+        ),
+        (route) => false,
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      debugPrint(
+        'Erreur connexion compte review ARC : '
+        '${error.message}',
+      );
+
+      showArcNotification(
+        'E-mail ou mot de passe incorrect.',
+        type: ArcNotificationType.error,
+        duration: const Duration(seconds: 6),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      debugPrint(
+        'Erreur connexion compte review ARC : $error',
+      );
+
+      showArcNotification(
+        'Impossible de se connecter. Réessaie.',
+        type: ArcNotificationType.error,
+      );
+    }
+  }
+
+  // ============================================
   // ENVOYER LE CODE OTP
   // ============================================
 
@@ -176,6 +311,24 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = isResend
         ? pendingEmail
         : emailController.text.trim().toLowerCase();
+
+    if (!isResend && email == reviewEmail) {
+      if (!acceptedLegal) {
+        showArcNotification(
+          'Accepte les Conditions d’utilisation '
+          'et la Politique de confidentialité '
+          'pour continuer.',
+          type: ArcNotificationType.error,
+          duration: const Duration(seconds: 6),
+        );
+        return;
+      }
+
+      setState(() {
+        reviewLogin = true;
+      });
+      return;
+    }
 
     if (!_isValidEmail(email)) {
       showArcNotification(
@@ -1011,6 +1164,107 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ============================================
+  // ÉTAPE COMPTE DE VÉRIFICATION
+  // ============================================
+
+  Widget _buildReviewLoginStep() {
+    return Column(
+      children: [
+        const Text(
+          'Compte de vérification',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(
+          height: 8,
+        ),
+        Text(
+          reviewEmail,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(
+          height: 30,
+        ),
+        TextField(
+          controller: passwordController,
+          obscureText: obscurePassword,
+          enabled: !isLoading,
+          textInputAction: TextInputAction.done,
+          style: const TextStyle(
+            color: Colors.white,
+          ),
+          decoration: InputDecoration(
+            labelText: 'Mot de passe',
+            suffixIcon: IconButton(
+              onPressed: () {
+                setState(() {
+                  obscurePassword = !obscurePassword;
+                });
+              },
+              icon: Icon(
+                obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+              ),
+            ),
+          ),
+          onSubmitted: (_) {
+            if (!isLoading) {
+              signInReviewAccount();
+            }
+          },
+        ),
+        const SizedBox(
+          height: 22,
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed:
+                isLoading ? null : signInReviewAccount,
+            child: isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    'Se connecter',
+                  ),
+          ),
+        ),
+        const SizedBox(
+          height: 12,
+        ),
+        TextButton(
+          onPressed: isLoading
+              ? null
+              : () {
+                  passwordController.clear();
+
+                  setState(() {
+                    reviewLogin = false;
+                  });
+                },
+          child: const Text(
+            'Modifier l’adresse e-mail',
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================
   // ÉTAPE CODE
   // ============================================
 
@@ -1174,6 +1428,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     emailController.dispose();
     codeController.dispose();
+    passwordController.dispose();
 
     super.dispose();
   }
@@ -1269,23 +1524,32 @@ class _LoginScreenState extends State<LoginScreen> {
                             const Duration(
                           milliseconds: 250,
                         ),
-                        child: codeSent
+                        child: reviewLogin
                             ? Container(
                                 key:
                                     const ValueKey(
-                                  'code',
+                                  'review',
                                 ),
                                 child:
-                                    _buildCodeStep(),
+                                    _buildReviewLoginStep(),
                               )
-                            : Container(
-                                key:
-                                    const ValueKey(
-                                  'email',
-                                ),
-                                child:
-                                    _buildEmailStep(),
-                              ),
+                            : codeSent
+                                ? Container(
+                                    key:
+                                        const ValueKey(
+                                      'code',
+                                    ),
+                                    child:
+                                        _buildCodeStep(),
+                                  )
+                                : Container(
+                                    key:
+                                        const ValueKey(
+                                      'email',
+                                    ),
+                                    child:
+                                        _buildEmailStep(),
+                                  ),
                       ),
 
                       const Spacer(),

@@ -8,7 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'screens/privacy_policy_screen.dart';
 import 'screens/profile_setup_screen.dart';
+import 'screens/terms_screen.dart';
 import 'services/notification_service.dart';
 
 Future<void> main() async {
@@ -152,8 +154,90 @@ class _ArcAppState extends State<ArcApp> {
         ),
       ),
 
-      home:
-          const AuthGate(),
+      // =================================
+      // ROUTAGE ARC
+      //
+      // WEB :
+      // https://arcapp.fr/privacy
+      // -> Politique de confidentialité
+      //
+      // https://arcapp.fr/terms
+      // -> Conditions d'utilisation
+      //
+      // Toutes les autres URL
+      // -> ARC normalement
+      // =================================
+
+      onGenerateRoute: (
+        RouteSettings settings,
+      ) {
+        // Sur le Web, on récupère directement
+        // le chemin présent dans la barre
+        // d'adresse du navigateur.
+        final browserPath =
+            kIsWeb
+                ? Uri.base.path
+                : '';
+
+        // Sur Android / iOS, ou si le navigateur
+        // est simplement sur "/", on conserve
+        // le routage Flutter normal.
+        final routePath =
+            browserPath.isNotEmpty &&
+                    browserPath != '/'
+                ? browserPath
+                : Uri.parse(
+                    settings.name ?? '/',
+                  ).path;
+
+        // ===============================
+        // POLITIQUE DE CONFIDENTIALITÉ
+        // ===============================
+
+        if (routePath == '/privacy' ||
+            routePath == '/privacy/') {
+          return MaterialPageRoute(
+            settings:
+                settings,
+            builder:
+                (
+              context,
+            ) =>
+                    const PrivacyPolicyScreen(),
+          );
+        }
+
+        // ===============================
+        // CONDITIONS D'UTILISATION
+        // ===============================
+
+        if (routePath == '/terms' ||
+            routePath == '/terms/') {
+          return MaterialPageRoute(
+            settings:
+                settings,
+            builder:
+                (
+              context,
+            ) =>
+                    const TermsScreen(),
+          );
+        }
+
+        // ===============================
+        // APPLICATION ARC NORMALE
+        // ===============================
+
+        return MaterialPageRoute(
+          settings:
+              settings,
+          builder:
+              (
+            context,
+          ) =>
+                  const AuthGate(),
+        );
+      },
     );
   }
 }
@@ -486,8 +570,8 @@ class WelcomePage extends StatelessWidget {
                       MaterialPageRoute(
                         builder:
                             (
-                              context,
-                            ) =>
+                          context,
+                        ) =>
                                 const LoginScreen(),
                       ),
                     );
