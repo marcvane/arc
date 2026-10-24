@@ -816,6 +816,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         'photo_1_url': finalPhoto1Url,
         'photo_2_url': finalPhoto2Url,
         'photo_3_url': finalPhoto3Url,
+        // Une nouvelle photo principale réactive automatiquement le profil.
+        // Les modifications du pseudo, de la bio ou des photos 2 et 3
+        // ne changent pas le statut de modération.
+        if (newPhoto1Url != null) 'excluded_from_votes': false,
       });
 
       if (!mounted) return;
